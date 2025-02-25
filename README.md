@@ -9,27 +9,43 @@ This guide will walk you through the process of setting up a RustDesk server on 
 2. Navigate to **Virtual Machines** → Click **Create** → **Azure Virtual Machine**.
 
 ### Configure the VM
-- **Image**: Select Ubuntu 22.04 LTS.
+- **Image**: Select Ubuntu 24.04 LTS.
 - **Size**: Choose B1s (1 vCPU, 1GB RAM, 30GB SSD).
 - **Authentication Type**: Select SSH (recommended).
 - **Username**: Set a username (e.g., `azureuser`).
-
-### Public Inbound Ports
-- Allow SSH (Port 22).
-- Add Custom TCP Rules for RustDesk:
-  - 21115-21119 (for RustDesk communication).
-  - 21116 (for NAT traversal).
 
 ### Create the VM
 - Click **Review + Create** → **Create VM**.
 - Once the VM is created, go to the VM’s **Overview** page and copy the **Public IP**.
 
+### Open Ports in Azure Network Security Group (NSG)
+- Go to Azure Portal → Your VM → Networking.
+- Click "Add inbound port rule".
+- Add these three rules:
+  - TCP 21115-21119 (for RustDesk communication)
+  - UDP 21116-21119 (for relay server)
+  - TCP 80 (for web panel, optional)
+- Click Save after adding all rules.
+
+### Verify Open Ports
+
+On your Azure VM, run:
+```sh
+sudo netstat -tulnp | grep LISTEN
+```
+
+If netstat is not found, install the required package:
+```sh
+sudo apt update && sudo apt install -y net-tools
+```
+
 ## Step 2: Connect to the Azure VM
 
 ### Open PowerShell on your Windows 11 machine and SSH into the Azure VM:
 ```bash
-ssh azureuser@<YOUR_AZURE_VM_PUBLIC_IP>
+ssh -i "PATH" azureuser@<YOUR_AZURE_VM_PUBLIC_IP>
 ```
+Replace `PATH` with the location of the SSH private key location on local machine.
 Replace `<YOUR_AZURE_VM_PUBLIC_IP>` with the actual IP.
 
 ### Update the system:
@@ -62,7 +78,7 @@ nano docker-compose.yml
 
 ### Paste the following configuration:
 ```yaml
-version: '3'
+version: '3.3'
 services:
   hbbs:
     image: rustdesk/rustdesk-server:latest
@@ -138,8 +154,8 @@ This is the server key you’ll use in the RustDesk client.
 1. Open RustDesk on the Windows 10 VM.
 2. Go to **Settings** → **Network**.
 3. Under **ID/Relay Server**, enter:
-   - **ID Server**: `<YOUR_AZURE_VM_PUBLIC_IP>:21117`
-   - **Relay Server**: `<YOUR_AZURE_VM_PUBLIC_IP>:21117`
+   - **ID Server**: `<YOUR_AZURE_VM_PUBLIC_IP>`
+   - **Relay Server**: `<YOUR_AZURE_VM_PUBLIC_IP>`
    - **Key**: Paste the server key from Step 5.
 4. Click **OK**.
 
