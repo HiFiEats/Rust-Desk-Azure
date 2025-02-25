@@ -27,18 +27,6 @@ This guide will walk you through the process of setting up a RustDesk server on 
   - TCP 80 (for web panel, optional)
 - Click Save after adding all rules.
 
-### Verify Open Ports
-
-On your Azure VM, run:
-```sh
-sudo netstat -tulnp | grep LISTEN
-```
-
-If netstat is not found, install the required package:
-```sh
-sudo apt update && sudo apt install -y net-tools
-```
-
 ## Step 2: Connect to the Azure VM
 
 ### Open PowerShell on your Windows 11 machine and SSH into the Azure VM:
@@ -115,6 +103,22 @@ sudo docker-compose up -d
 sudo docker ps
 ```
 You should see two containers: `hbbs` and `hbbr`.
+
+### Verify Open Ports
+On your Azure VM, run:
+```sh
+sudo netstat -tulnp | grep LISTEN
+```
+
+If netstat is not found, install the required package:
+```sh
+sudo apt update && sudo apt install -y net-tools
+```
+
+Re-run the code
+```sh
+sudo netstat -tulnp | grep LISTEN
+```
 
 ## Step 4: Allow Firewall Rules
 
