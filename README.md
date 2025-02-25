@@ -1,155 +1,183 @@
-# RustDesk Self-Hosted Server Setup Guide
+# RustDesk Server Setup on Azure VM
 
-This guide provides a step-by-step procedure to set up and configure RustDesk self-hosted servers (HBBS & HBBR) correctly. Following these steps will ensure that your setup works 100% from the beginning without issues.
+This guide will walk you through the process of setting up a RustDesk server on an Azure VM, allowing you to connect securely from your Windows 10 Hyper-V VM and Windows 11 host machine.
 
-## 🛠️ Step 1: Set Up a Server for RustDesk
+## Step 1: Set Up Azure VM
 
-You need a VPS, cloud server, or on-premise machine with:
+### Log in to Azure Portal
+1. Go to the [Azure Portal](https://portal.azure.com/).
+2. Navigate to **Virtual Machines** → Click **Create** → **Azure Virtual Machine**.
 
-- Ubuntu 20.04 / 22.04 / 24.04 (Recommended)
-- A public IP address (if clients will connect from outside)
-- Docker installed (RustDesk HBBS/HBBR runs in Docker)
+### Configure the VM
+- **Image**: Select Ubuntu 22.04 LTS.
+- **Size**: Choose B1s (1 vCPU, 1GB RAM, 30GB SSD).
+- **Authentication Type**: Select SSH (recommended).
+- **Username**: Set a username (e.g., `azureuser`).
 
-### Install Docker & Docker-Compose
+### Public Inbound Ports
+- Allow SSH (Port 22).
+- Add Custom TCP Rules for RustDesk:
+  - 21115-21119 (for RustDesk communication).
+  - 21116 (for NAT traversal).
 
+### Create the VM
+- Click **Review + Create** → **Create VM**.
+- Once the VM is created, go to the VM’s **Overview** page and copy the **Public IP**.
+
+## Step 2: Connect to the Azure VM
+
+### Open PowerShell on your Windows 11 machine and SSH into the Azure VM:
+```bash
+ssh azureuser@<YOUR_AZURE_VM_PUBLIC_IP>
+```
+Replace `<YOUR_AZURE_VM_PUBLIC_IP>` with the actual IP.
+
+### Update the system:
 ```bash
 sudo apt update && sudo apt upgrade -y
-sudo apt install docker.io docker-compose -y
-sudo systemctl enable --now docker
 ```
 
-## 🌍 Step 2: Set Up RustDesk HBBS (Rendezvous) & HBBR (Relay)
+### Install Docker and Docker Compose:
+```bash
+sudo apt install -y docker.io docker-compose curl
+```
 
-We will use Docker-Compose to set up both servers.
+### Enable and start Docker:
+```bash
+sudo systemctl enable docker
+sudo systemctl start docker
+```
 
-### Create a Working Directory
+## Step 3: Set Up RustDesk Server (HbBS & HbBr)
 
+### Create a directory for RustDesk:
 ```bash
 mkdir -p ~/rustdesk-server && cd ~/rustdesk-server
 ```
 
-### Create a `docker-compose.yml` File
-
+### Create a `docker-compose.yml` file:
 ```bash
 nano docker-compose.yml
 ```
 
-Paste the following content:
-
+### Paste the following configuration:
 ```yaml
 version: '3'
 services:
   hbbs:
     image: rustdesk/rustdesk-server:latest
     container_name: hbbs
-    restart: always
+    restart: unless-stopped
     network_mode: "host"
+    command: >
+      /usr/bin/hbbs -r <YOUR_AZURE_VM_PUBLIC_IP>:21117
     volumes:
       - ./data:/root
-    command: >
-      hbbs -r <YOUR_SERVER_IP>:21117
 
   hbbr:
     image: rustdesk/rustdesk-server:latest
     container_name: hbbr
-    restart: always
+    restart: unless-stopped
     network_mode: "host"
+    command: >
+      /usr/bin/hbbr
     volumes:
       - ./data:/root
-    command: >
-      hbbr
 ```
+Replace `<YOUR_AZURE_VM_PUBLIC_IP>` with your Azure VM’s public IP.
 
-🔹 Replace `<YOUR_SERVER_IP>` with your actual public IP address or local IP if running on a LAN.
+### Save the file:
+Press `CTRL+X`, then `Y`, then `Enter`.
 
-## 🚀 Step 3: Start RustDesk Servers
-
-Run the following command:
-
+### Start RustDesk containers:
 ```bash
 sudo docker-compose up -d
 ```
 
-This will:
+### Verify the containers are running:
+```bash
+sudo docker ps
+```
+You should see two containers: `hbbs` and `hbbr`.
 
-- Download and run HBBS (Rendezvous) on ports 21115, 21116, and 21118.
-- Download and run HBBR (Relay) on ports 21117 and 21119.
+## Step 4: Allow Firewall Rules
 
-## 🔑 Step 4: Get the Server Key
+### Open required ports:
+```bash
+sudo ufw allow 21115:21119/tcp
+sudo ufw allow 21116/udp
+sudo ufw enable
+```
 
-Run:
+### Verify the firewall status:
+```bash
+sudo ufw status
+```
+Ensure the ports `21115-21119/tcp` and `21116/udp` are allowed.
 
+## Step 5: Get the Server Key
+
+### Check the logs for the server key:
 ```bash
 sudo docker logs hbbs --tail 50
 ```
 
-Look for a line like this:
-
-```
+### Look for a line like:
+```bash
 [INFO] Key: 5opIdjZJsxPbXcs7fmUKMzAkoPsh8Pbcz5yBq1r9XRM=
 ```
+This is the server key you’ll use in the RustDesk client.
 
-🔹 This is the key you need for RustDesk clients.
+## Step 6: Configure RustDesk Client
 
-## 🛠️ Step 5: Open Required Ports in Firewall
+### Install RustDesk on your Windows 10 Hyper-V VM:
+- Download the RustDesk client from [https://rustdesk.com/](https://rustdesk.com/).
+- Install it on the Windows 10 VM.
 
-Run:
+### Configure RustDesk Client:
+1. Open RustDesk on the Windows 10 VM.
+2. Go to **Settings** → **Network**.
+3. Under **ID/Relay Server**, enter:
+   - **ID Server**: `<YOUR_AZURE_VM_PUBLIC_IP>:21117`
+   - **Relay Server**: `<YOUR_AZURE_VM_PUBLIC_IP>:21117`
+   - **Key**: Paste the server key from Step 5.
+4. Click **OK**.
 
+## Step 7: Test the Connection
+
+### Install RustDesk on your Windows 11 host machine:
+- Download and install RustDesk from [https://rustdesk.com/](https://rustdesk.com/).
+
+### Connect to the Windows 10 VM:
+1. Open RustDesk on your Windows 11 machine.
+2. Enter the ID of the Windows 10 VM (shown in RustDesk).
+3. Click **Connect**.
+4. Accept the connection on the Windows 10 VM.
+
+## Step 8: Troubleshooting
+
+### Check logs:
+If the connection fails, check the logs:
 ```bash
-sudo ufw allow 21115/tcp
-sudo ufw allow 21116/tcp
-sudo ufw allow 21116/udp
-sudo ufw allow 21117/tcp
-sudo ufw allow 21118/tcp
-sudo ufw allow 21119/tcp
-sudo ufw reload
+sudo docker logs hbbs
+sudo docker logs hbbr
 ```
 
-🔹 This ensures all required TCP/UDP ports are open.
-
-## 💻 Step 6: Configure RustDesk Clients
-
-Now, on the RustDesk Client, go to:
-
-- Settings → Network
-- Check "Use Custom Server"
-- Enter your server IP in both fields:
-  - Rendezvous Server: `<YOUR_SERVER_IP>:21115`
-  - Relay Server: `<YOUR_SERVER_IP>:21117`
-- Enter the Key from Step 4.
-
-## ✅ Step 7: Test Remote Connection
-
-- Install RustDesk on another machine (Windows/Linux/Mac).
-- Enter the RustDesk ID of the target machine.
-- Connect and control the machine remotely!
-
-## 🛠️ Step 8: Manage & Troubleshoot
-
-If you face issues:
-
-### Restart servers:
-
+### Restart containers:
+Restart the RustDesk containers if needed:
 ```bash
 sudo docker-compose down
 sudo docker-compose up -d
 ```
 
-### Check logs:
-
+### Verify ports:
+Ensure the ports are open and listening:
 ```bash
-sudo docker logs hbbs --tail 50
-sudo docker logs hbbr --tail 50
+sudo netstat -tulnp | grep LISTEN
 ```
 
-### Ensure firewall/ports are open:
+## Final Notes
+- **Resource Optimization**: If the VM struggles due to low resources, consider upgrading to a higher-tier VM (e.g., B2s with 2GB RAM).
+- **Security**: Set up a RustDesk key for authentication (optional but recommended).
 
-```bash
-sudo ufw status
-```
-
-## 🎯 Conclusion
-
-Following this step-by-step guide, your RustDesk self-hosted server should work flawlessly from the start.
-
-🚀 Let me know if you need help!
+By following these steps, you should have a fully functional RustDesk server running on an Azure VM, accessible from your Windows 10 Hyper-V VM and Windows 11 host machine. Let me know if you encounter any issues! 🚀
